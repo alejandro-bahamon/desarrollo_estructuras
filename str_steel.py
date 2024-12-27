@@ -19,6 +19,7 @@ Functions available:
 -stren_flex_cncs_nc_cfy
 -slend_i_comp_ns
 -slend_i_flex_ns
+-slend_i_s
 """
 
 ##-----------------------------------------------------------------------------------------------------##
