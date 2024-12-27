@@ -81,7 +81,8 @@ def prop_mat(mat_name):
         FileNotFoundError: If the database file is missing.
     """
  # Define the path to the database file
-    db_path = 'bdmaterial.csv'
+    current_dir = os.path.dirname(__file__)
+    db_path = os.path.join(current_dir, 'bdmaterial.csv')
 
     # Check if the database file exists
     if not os.path.exists(db_path):
@@ -158,7 +159,8 @@ def prop_i(sect_name):
     """
 
     # Define the path to the database file
-    db_path = 'bdperfilesi.csv'
+    current_dir = os.path.dirname(__file__)
+    db_path = os.path.join(current_dir, 'bdperfilesi.csv')
 
     # Check if the database file exists
     if not os.path.exists(db_path):
@@ -262,7 +264,8 @@ def prop_hss_rect(sect_name):
     """
 
     # Define the path to the database file
-    db_path = 'bd_tub_rect_cuad.csv'
+    current_dir = os.path.dirname(__file__)
+    db_path = os.path.join(current_dir, 'bd_tub_rect_cuad.csv')
 
     # Check if the database file exists
     if not os.path.exists(db_path):
