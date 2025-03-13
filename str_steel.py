@@ -935,8 +935,11 @@ def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
         Mn_F5_3 = stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb)
 
         Mn_fin=min(Mn_F5_1,Mn_F5_2,Mn_F5_3)
+        
+        phi_b = 0.90 #
 
-    return Mn_fin
+        Mres = phi_b*Mn_fin
+    return Mres
 
 def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):
     #AISC 360-22 F7.1
@@ -1133,18 +1136,51 @@ def stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb):
 
     return Mn
 
+def stren_flex_hss_rect(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
 
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
 
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web= slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+    
+    Mn_F7_1 = stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb)
+    Mn_F7_2 = stren_flex_hss_rect_flb_F7_2(prop_mat, prop_sect, Lb, Cb)
+    Mn_F7_3 = stren_flex_hss_rect_wlb_F7_3(prop_mat, prop_sect, Lb, Cb)
+    Mn_F7_4 = stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb)
 
+    Mn_fin=min(Mn_F7_1,Mn_F7_2,Mn_F7_3,Mn_F7_4)
+        
+    phi_b = 0.90
 
+    Mres = phi_b*Mn_fin
 
-
-
-
-
-
-
-
+    return Mres
 
 def stren_comp_flex_buck_ns(prop_mat,prop_sect,Kef,Long):   
     Fy = prop_mat["Fy"]
