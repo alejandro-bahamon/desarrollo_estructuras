@@ -13,10 +13,10 @@ Functions available:
     Retrieve geometric properties of a rectangular tubular section.
 - prop_i_bu:
     Calculate the geometric properties of a custom I-section (assembled).
--stren_flex_yield
--stren_flex_c_c_ltb
--stren_flex_ncs_c_flb
--stren_flex_cncs_nc_cfy
+-stren_flex_i_y_F2_1
+-stren_flex_i_ltb_F2_2
+-stren_flex_i_flb_F3_2
+-stren_flex_i_cfy_F4_1
 -slend_i_comp_ns
 -slend_i_flex_ns
 -slend_i_s
@@ -66,6 +66,7 @@ def prop_mat(mat_name):
             - A193-GB7-und4"
             - SAE1020
             - SAE1045
+            - A1011-G50
 
     Returns:
         dict: A dictionary containing the following mechanical properties:
@@ -287,7 +288,7 @@ def prop_hss_rect(sect_name):
     sect_name = str(sect_select["Seccion_tub"].iloc[0])
     d_sect = float(sect_select["H (mm)"].iloc[0])
     tw_sect = float(sect_select["tdis (mm)"].iloc[0])
-    b_sect = float(sect_select["B (mm)"].iloc[0])
+    bf_sect = float(sect_select["B (mm)"].iloc[0])
     tf_sect = float(sect_select["tdis (mm)"].iloc[0])
 
     Ag_sect = float(sect_select["Ag (mm2)"].iloc[0])
@@ -299,15 +300,16 @@ def prop_hss_rect(sect_name):
     Zy_sect = float(sect_select["Zy (mm3)"].iloc[0])
     rx_sect = float(sect_select["rx (mm)"].iloc[0])
     ry_sect = float(sect_select["ry (mm)"].iloc[0])
-
+    J_sect = float(sect_select["Js (mm4)"].iloc[0])
     weight_sect = float(sect_select["Peso (kg/m)"].iloc[0])
+    sect_type = "Rolled"
 
     # Group all properties into a dictionary
     prop_sect_tub = {
         "sect_name": sect_name,
         "d_sect": d_sect,
         "tw_sect": tw_sect, 
-        "b_sect": b_sect, 
+        "bf_sect": bf_sect, 
         "tf_sect": tf_sect, 
         "Ag_sect": Ag_sect, 
         "Ix_sect": Ix_sect, 
@@ -318,7 +320,9 @@ def prop_hss_rect(sect_name):
         "Zy_sect": Zy_sect, 
         "rx_sect": rx_sect, 
         "ry_sect": ry_sect, 
-        "weight_sect": weight_sect
+        "J_sect":J_sect,
+        "weight_sect": weight_sect,
+        "sect_type": sect_type
     }
 
     # Return the dictionary of properties
@@ -433,7 +437,7 @@ def prop_i_bu(section_dims):
 ##--------------------------------------------STRENGTH----------------------------------------------------
 ##-----------------------------------------------------------------------------------------------------##
 
-def stren_flex_yield(prop_mat, prop_sect):
+def stren_flex_i_y_F2_1(prop_mat, prop_sect):
     """
     AISC 360-22 F2.1
     Calculate the flexural strength of a section based on yield criteria.
@@ -455,7 +459,7 @@ def stren_flex_yield(prop_mat, prop_sect):
         ```python
         prop_mat = {"Fy": 250}  # Yield stress in MPa
         prop_sect = {"Zx_sect": 500000}  # Plastic modulus in mm³
-        Mp_sect = stren_flex_yield(prop_mat, prop_sect)
+        Mp_sect = stren_flex_i_y_F2_1(prop_mat, prop_sect)
         print(Mp_sect)  # Output: 112500000.0 (N·mm)
         ```
     """
@@ -465,11 +469,11 @@ def stren_flex_yield(prop_mat, prop_sect):
     Zx_sect = prop_sect["Zx_sect"]  # Plastic modulus
 
     # Calculate the plastic moment capacity
-    Mp_sect = Fy * Zx_sect
+    Mn = Fy * Zx_sect
 
-    return Mp_sect
+    return Mn
 
-def stren_flex_c_c_ltb(prop_mat, prop_sect, Lb, Cb):
+def stren_flex_i_ltb_F2_2(prop_mat, prop_sect, Lb, Cb):
     
     #AISC 360-22 F2
       
@@ -494,7 +498,7 @@ def stren_flex_c_c_ltb(prop_mat, prop_sect, Lb, Cb):
     Cw_sect = prop_sect["Cw_sect"]
 
     
-    Mp = stren_flex_yield(prop_mat, prop_sect) #Calls function that calculates plastic moment
+    Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect) #Calls function that calculates plastic moment
     
     
     c_sect = 1
@@ -514,16 +518,9 @@ def stren_flex_c_c_ltb(prop_mat, prop_sect, Lb, Cb):
     else:
         Mn = min(Fcr*Sx_sect,Mp) #F2-3
 
-    output_flex ={
-        "rts": rts,
-        "Lp": Lp,
-        "Lr": Lr,
-        "Fcr": Fcr,
-        "Mn": Mn
-    }
-    return output_flex
+    return Mn
 
-def stren_flex_ncs_c_flb(prop_mat, prop_sect, Lb, Cb,):
+def stren_flex_i_flb_F3_2(prop_mat, prop_sect, Lb, Cb):
     
     #AISC 360-22 F3
       
@@ -547,7 +544,7 @@ def stren_flex_ncs_c_flb(prop_mat, prop_sect, Lb, Cb,):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
     
-    Mp = stren_flex_yield(prop_mat, prop_sect) #Calls function that calculates plastic moment
+    Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect) #Calls function that calculates plastic moment
     
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
@@ -558,18 +555,13 @@ def stren_flex_ncs_c_flb(prop_mat, prop_sect, Lb, Cb,):
     kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
 
     if slend_flange == "Noncompact":
-        Mn = Mp-(Mp-0.7*Fy*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange))
+        Mn = Mp-(Mp-0.7*Fy*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange)) #F3-1
     elif slend_flange == "Slender":
-        Mn = 0.9*Es*kc*Sx_sect/(lamb_flange**2)
+        Mn = 0.9*Es*kc*Sx_sect/(lamb_flange**2) #F3-2
+           
+    return Mn
 
-    Mn1 = Mp-(Mp-0.7*Fy*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange))
-
-    output_flex ={"Mn": Mn,
-                  "Mn1": Mn1}
-    
-    return output_flex
-
-def stren_flex_cncs_nc_cfy(prop_mat, prop_sect, Lb, Cb,):
+def stren_flex_i_cfy_F4_1(prop_mat, prop_sect, Lb, Cb):
     
     #AISC 360-22 F4.1
       
@@ -593,17 +585,34 @@ def stren_flex_cncs_nc_cfy(prop_mat, prop_sect, Lb, Cb,):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
     
-    Myc = Fy*Sx_sect
-    Rpc = Mp/Myc
-    Mn = Rpc*Myc
-    
-    output_flex ={"Mn": Mn}
-    
-    return output_flex
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
 
-def stren_flex_cncs_nc_cfy(prop_mat, prop_sect, Lb, Cb,):
+
+    Iyc_sect=1/12*tf_sect*bf_sect**3
+    Myc=Fy*Sx_sect #F4-4
+    Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+    if Iyc_sect/Iy_sect>0.23:
+        if h_sect/tw_sect<=lamb_p_web:
+            Rpc=Mp1/Myc #F4-9a
+        elif h_sect/tw_sect>lamb_p_web:
+            Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc) #F4-9b
+    elif Iyc_sect/Iy_sect<=0.23:
+        Rpc=1 #F4-10
+
+    Mn=Rpc*Myc #F4-1
     
-    #AISC 360-22 F4.1
+    return Mn
+
+def stren_flex_i_ltb_F4_2(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F4.2
       
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
@@ -624,18 +633,47 @@ def stren_flex_cncs_nc_cfy(prop_mat, prop_sect, Lb, Cb,):
     ry_sect = prop_sect["ry_sect"]
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
-    
-    Myc = Fy*Sx_sect
-    Rpc = Mp/Myc
-    Mn = Rpc*Myc
-    
-    output_flex ={"Mn": Mn}
-    
-    return output_flex
 
-def stren_flex_cncs_nc_ltb(prop_mat, prop_sect, Lb, Cb,):
-    
-    #AISC 360-22 F4.1
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+   
+    aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+    rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+    FL = 0.7*Fy #F4-6a
+
+    Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+    Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
+    Fcr = Cb*pi**2*Es/(Lb/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(Lb/rt)**2))) #F4-5
+
+    Iyc_sect=1/12*tf_sect*bf_sect**3
+    Myc=Fy*Sx_sect #F4-4
+    Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+    if Iyc_sect/Iy_sect>0.23:
+        if h_sect/tw_sect<=lamb_p_web:
+            Rpc=Mp1/Myc #F4-9a
+        elif h_sect/tw_sect>lamb_p_web:
+            Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc) #F4-9b
+    elif Iyc_sect/Iy_sect<=0.23:
+        Rpc=1 #F4-10
+
+    if Lb<=Lp:
+        Mn=Mp1
+    elif Lb<=Lr:
+        Mn=min(Cb*(Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*((Lb-Lp)/(Lr-Lp))),Rpc*Myc) #F4-2
+    elif Lb>Lr:
+        Mn=min(Fcr*Sx,Rpc*Myc) #F4-3
+  
+    return Mn
+
+def stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F4.3
       
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
@@ -656,28 +694,490 @@ def stren_flex_cncs_nc_ltb(prop_mat, prop_sect, Lb, Cb,):
     ry_sect = prop_sect["ry_sect"]
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
-    
-    Myc = Fy*Sx_sect
-    Rpc = Mp/Myc
-    Mn = Rpc*Myc
+
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+
+    kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
     FL = 0.7*Fy
+    Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+    Iyc_sect=1/12*tf_sect*bf_sect**3
+    Myc=Fy*Sx_sect
+    Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+    if Iyc_sect/Iy_sect>0.23:
+        if h_sect/tw_sect<=lamb_p_web:
+            Rpc=Mp1/Myc
+        elif h_sect/tw_sect>lamb_p_web:
+            Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc)
+    elif Iyc_sect/Iy_sect<=0.23:
+        Rpc=1
+
+    if slend_flange == "Compact":
+        Mn=Mp1
+    elif slend_flange == "Noncompact":
+        Mn=Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange)) #F4-13
+    elif slend_flange == "Slender":
+        Mn=0.90*Es*kc*Sx_sect/(lamb_flange**2) #F4-14
+
+    return Mn
+
+def stren_flex_i_cfy_F5_1(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F5.1
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
+
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+
+    aw = min(h_sect*tw_sect/(bf_sect*tf_sect),10) #F4-12
+    Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
+
+    Mn = Rpg*Fy*Sx_sect
     
-    aw = h_sect*tw_sect/(bf_sect*tf_sect)
-    rt = bf_sect/sqrt(12*(1+1/6*aw))
+    return Mn
 
-    Lp = 1.1*rt*sqrt(Es/Fy)
-    Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2))
+def stren_flex_i_ltb_F5_2(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F5.2
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
 
-    Mn = Cb[Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*(()/())]
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
 
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
 
-    output_flex ={"Myc": Myc,
-                  "aw": aw,
-                  "Lp": Lp,
-                  "Lr": Lr}
+    Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+    aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+    rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+    Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
+    Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
+    Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+    if Lb<= Lp:
+        Mn =  Mp1
+    elif Lb<=Lr:
+        Fcr = min(Cb*(Fy-(0.3*Fy)*((Lb-Lp)/(Lr-Lp))),Fy) #F5-3
+        Mn = Rpg*Fcr*Sx_sect
+    elif Lb>Lr:
+        Fcr = min(Cb*pi**2*Es/((Lb/rt)**2),Fy)
+        Mn = Rpg*Fcr*Sx_sect
     
-    return output_flex
+    return Mn
 
+def stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F5.2
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
+
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+    
+    kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
+    Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+    if slend_flange == "Compact":
+        Mn = Mp1
+    elif slend_flange == "Noncompact":
+        Fcr = Fy-(0.3*Fy)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange)) #F5-8
+        Mn = Rpg*Fcr*Sx_sect
+    elif slend_flange == "Slender":
+        Fcr = 0.9*Es*kc/(lamb_flange**2) #F5-9
+        Mn = Rpg*Fcr*Sx_sect
+    
+    return Mn
+
+def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
+
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web= slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+    if slend_web == "Compact":
+        if slend_flange == "Compact":
+            #2.1
+            Mn_F2_1 = stren_flex_i_y_F2_1(prop_mat, prop_sect)
+            #2.2
+            Mn_F2_2 = stren_flex_i_ltb_F2_2(prop_mat, prop_sect, Lb, Cb)
+
+            Mn_fin=min(Mn_F2_1,Mn_F2_2)
+        else:
+            #2.2
+            Mn_F2_2 = stren_flex_i_ltb_F2_2(prop_mat, prop_sect, Lb, Cb)
+            #3.2
+            Mn_F3_2 = stren_flex_i_flb_F3_2(prop_mat, prop_sect, Lb, Cb)
+
+            Mn_fin=min(Mn_F2_2,Mn_F3_2)
+        
+    elif slend_web == "Noncompact":
+        #4.1
+        Mn_F4_1 = stren_flex_i_cfy_F4_1(prop_mat, prop_sect, Lb, Cb)
+        #4.2
+        Mn_F4_2 = stren_flex_i_ltb_F4_2(prop_mat, prop_sect, Lb, Cb)
+        #4.3
+        Mn_F4_3 = stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb)
+        
+        Mn_fin=min(Mn_F4_1,Mn_F4_2,Mn_F4_3)
+
+    elif slend_web == "Slender":
+        #5.1
+        Mn_F5_1 = stren_flex_i_cfy_F5_1(prop_mat, prop_sect, Lb, Cb)
+        #5.2
+        Mn_F5_2 = stren_flex_i_ltb_F5_2(prop_mat, prop_sect, Lb, Cb)
+        #5.3
+        Mn_F5_3 = stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb)
+
+        Mn_fin=min(Mn_F5_1,Mn_F5_2,Mn_F5_3)
+
+    return Mn_fin
+
+def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F7.1
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    sect_type = prop_sect["sect_type"]
+
+    slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web = slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+    Mp = Fy*Zx_sect #F7-1
+    Mn = Mp
+
+    return Mn
+
+def stren_flex_hss_rect_flb_F7_2(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F7.2
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    sect_type = prop_sect["sect_type"]
+
+    slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web = slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+    Mp = Fy*Zx_sect #F7-1
+
+    if slend_flange == "Compact":
+        Mn = Mp
+    elif slend_flange == "Noncompact":
+        Mn = min(Mp-(Mp-Fy*Sx_sect)*(3.57*lamb_flange*sqrt(Fy/Es)-4),Mp)
+    elif slend_flange == "Slender":
+        if sect_type == "Rolled":
+            be = min(1.95*tf_sect*sqrt(Es/Fy)*(1-0.38/lamb_flange*sqrt(Es/Fy)),bf_sect)
+        elif sect_type == "Built_up":
+            be = min(1.92*tf_sect*sqrt(Es/Fy)*(1-0.34/lamb_flange*sqrt(Es/Fy)),bf_sect)
+
+        if sect_type == "Rolled":
+            be_int = be-3*tdis #Clear distance between webs minus radius
+            d_int = d_sect-3*tdis #Clear distance between flanges minus radius
+        elif sect_type == "Built_up":
+            be_int = be-2*tw_sect #Clear distance between webs
+            d_int = d_sect-2*tf_sect #Clear distance between flanges
+        Se = (be*d_sect**2/6)-(be_int*d_int**3/(6*d_sect))
+        Mn = Fy*Se #F7-3
+
+    return Mn
+
+def stren_flex_hss_rect_wlb_F7_3(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F7.3
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    sect_type = prop_sect["sect_type"]
+
+    slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web = slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+    Mp = Fy*Zx_sect #F7-1
+
+    if slend_web == "Compact":
+        Mn = Mp
+    elif slend_flange == "Noncompact":
+        Mn = min(Mp-(Mp-Fy*Sx_sect)*(0.305*lamb_web*sqrt(Fy/Es)-0.738),Mp) #F7-6
+
+    elif slend_flange == "Slender":
+        if sect_type == "Rolled":
+            b_int = bf_sect-3*tdis #Clear distance between webs minus radius
+            d_int = d_sect-3*tdis #Clear distance between flanges minus radius
+        elif sect_type == "Built_up":
+            b_int = bf_sect-2*tw_sect #Clear distance between webs
+            d_int = d_sect-2*tf_sect #Clear distance between flanges
+        aw = 2*d_int*tw_sect/(b_int*tf_sect)
+        kc = 4.0
+        Rpg = min(1-aw/(1200+300*aw)*(lamb_web-5.7*sqrt(Es/Fy)),1)
+        Mn1 = Rpg*Fy*Sx_sect #F7-7
+        
+        Fcr = 0.9*Es*kc/(lamb_flange**2)
+        Mn2 = Rpg*Fcr*Sx_sect
+
+        Mn = min(Mn1,Mn2)
+    return Mn
+
+def stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb):
+    #AISC 360-22 F7.4
+      
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    sect_type = prop_sect["sect_type"]
+
+    slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web = slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+    Mp = Fy*Zx_sect #F7-1
+
+    Lp = 0.13*Es*ry_sect*sqrt(J_sect*Ag_sect)/Mp #F7-12
+    Lr = 2*Es*ry_sect*sqrt(J_sect*Ag_sect)/(0.7*Fy*Sx_sect) #F7-13
+
+    if Lb<=Lp:
+        Mn = Mp
+    elif Lb<=Lr:
+        Mn = min(Cb*(Mp-(Mp-0.7*Fy*Sx_sect)*((Lb-Lp)/(Lr-Lp))),Mp)
+    elif Lb>Lr:
+        Mn = min(2*E*Cb*sqrt(J_sect*Ag_sect)/(Lb/ry_sect),Mp)
+
+    return Mn
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def stren_comp_flex_buck_ns(prop_mat,prop_sect,Kef,Long):   
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
+
+    rmin=min(rx_sect,ry_sect)
+
+    glob_slend = Kef*Long/rmin #Esbeltez global del elemento a compresión
+    Fe=(pi**2*Es)/(Kef*Long/rmin)**2 #Esfuerzo crítico de pandeo elástico
+    if Fe>=0.44*Fy:
+        Fcr=(0.658**(Fy/Fe))*Fy
+    elif Fe<0.44*Fy:
+        Fcr = 0.877*Fe
+    Cr = Fcr*Ag_sect #Resistencia a compresión
+
+    return Cr
 
 
 ##-----------------------------------------------------------------------------------------------------##
@@ -811,7 +1311,6 @@ def slend_i_flex_ns(prop_mat, prop_sect):
     elif lamb_flange <= lamb_r_flange: slend_flange = "Noncompact" 
     elif lamb_flange > lamb_r_flange: slend_flange = "Slender" 
 
-
     # Slenderness of web
     lamb_p_web = 3.76 * math.sqrt(Es / Fy)  # Limiting slenderness for compact webs
     lamb_r_web = 5.70 * math.sqrt(Es / Fy)  # Limiting slenderness for compact webs
@@ -823,13 +1322,13 @@ def slend_i_flex_ns(prop_mat, prop_sect):
     elif lamb_web > lamb_r_web: slend_web = "Slender"
   
     slend_flex_ns = {
-        "lamb_flange": round(lamb_flange,2),
-        "lamb_r_flange": round(lamb_r_flange,2),
-        "lamb_p_flange": round(lamb_p_flange,2),
+        "lamb_flange": lamb_flange,
+        "lamb_r_flange": lamb_r_flange,
+        "lamb_p_flange": lamb_p_flange,
         "slend_flange": slend_flange,
-        "lamb_web": round(lamb_web,2),
-        "lamb_r_web": round(lamb_r_web,2),
-        "lamb_p_web": round(lamb_p_web,2),
+        "lamb_web": lamb_web,
+        "lamb_r_web": lamb_r_web,
+        "lamb_p_web": lamb_p_web,
         "slend_web": slend_web
     } 
 
@@ -979,3 +1478,58 @@ def slend_i_s(prop_mat, prop_sect,element_type,struct_syst,axial_load=0):
     } 
 
     return slend_i_s
+
+def slend_hss_rect_flex_ns(prop_mat, prop_sect):
+
+    # Extract material properties
+    Fy = prop_mat["Fy"]  # Yield stress
+    Es = prop_mat["Es"]  # Modulus of elasticity
+
+    # Extract section properties
+    bf_sect = prop_sect["bf_sect"]  # Flange width
+    tf_sect = prop_sect["tf_sect"]  # Flange thickness
+    d_sect = prop_sect["d_sect"]  # Clear height of the web
+    tw_sect = prop_sect["tw_sect"]  # Web thickness
+    sect_type = prop_sect["sect_type"]
+
+    tdis = 0.93*tf_sect #Design wall thickness B.4.2
+
+    if sect_type == "Rolled":
+        bf_int = bf_sect-3*tdis #Clear distance between webs minus radius
+        d_int = d_sect-3*tdis #Clear distance between flanges minus radius
+    elif sect_type == "Built_up":
+        bf_int = bf_sect-2*tw_sect #Clear distance between webs
+        d_int = d_sect-2*tf_sect #Clear distance between flanges
+
+    # Slenderness of flange
+    lamb_p_flange = 1.12 * math.sqrt(Es / Fy)  # Limiting slenderness for compact flanges
+    lamb_r_flange = 1.40 * math.sqrt(Es / Fy)  # Limiting slenderness for non compact flanges
+
+    lamb_flange = bf_int/tf_sect # Flange slenderness ratio
+
+    if lamb_flange <= lamb_p_flange: slend_flange = "Compact" 
+    elif lamb_flange <= lamb_r_flange: slend_flange = "Noncompact" 
+    elif lamb_flange > lamb_r_flange: slend_flange = "Slender" 
+
+    # Slenderness of web
+    lamb_p_web = 2.42 * math.sqrt(Es / Fy)  # Limiting slenderness for compact webs
+    lamb_r_web = 5.70 * math.sqrt(Es / Fy)  # Limiting slenderness for compact webs
+    
+    lamb_web = d_int/tw_sect # Web slenderness ratio
+
+    if lamb_web <= lamb_p_web: slend_web = "Compact" 
+    elif lamb_web <= lamb_r_web: slend_web = "Noncompact" 
+    elif lamb_web > lamb_r_web: slend_web = "Slender"
+  
+    slend_flex_ns = {
+        "lamb_flange": lamb_flange,
+        "lamb_r_flange": lamb_r_flange,
+        "lamb_p_flange": lamb_p_flange,
+        "slend_flange": slend_flange,
+        "lamb_web": lamb_web,
+        "lamb_r_web": lamb_r_web,
+        "lamb_p_web": lamb_p_web,
+        "slend_web": slend_web
+    } 
+
+    return slend_flex_ns
