@@ -1491,7 +1491,7 @@ def stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     sect_type = prop_sect["sect_type"]
 
-    # Compute plastic moment
+   
     slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -1547,7 +1547,6 @@ def stren_flex_hss_rect(prop_mat, prop_sect, Lb, Cb):
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
     tf_sect = prop_sect["tf_sect"]
-    h_sect = prop_sect["h_sect"]
     Ag_sect = prop_sect["Ag_sect"]
     Ix_sect = prop_sect["Ix_sect"]
     Iy_sect = prop_sect["Iy_sect"]
@@ -1558,10 +1557,10 @@ def stren_flex_hss_rect(prop_mat, prop_sect, Lb, Cb):
     rx_sect = prop_sect["rx_sect"]
     ry_sect = prop_sect["ry_sect"]
     J_sect = prop_sect["J_sect"]
-    Cw_sect = prop_sect["Cw_sect"]
+    sect_type = prop_sect["sect_type"]
 
     # Compute slenderness parameters
-    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation 
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
     lamb_r_flange= slend_flex["lamb_r_flange"]
