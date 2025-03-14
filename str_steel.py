@@ -1,7 +1,6 @@
 """
 str_steel: Structural Steel Calculations Module
 
-
 This module provides functions to perform structural calculations for steel elements.
 
 Functions available:
@@ -12,14 +11,12 @@ Functions available:
 - prop_hss_rect:
     Retrieve geometric properties of a rectangular tubular section.
 - prop_i_bu:
-    Calculate the geometric properties of a custom I-section (assembled).
--stren_flex_i_y_F2_1
--stren_flex_i_ltb_F2_2
--stren_flex_i_flb_F3_2
--stren_flex_i_cfy_F4_1
--slend_i_comp_ns
--slend_i_flex_ns
--slend_i_s
+    Calculate the geometric properties of a built-up I-section.
+- stren_flex_i
+    Calculate the flexural strength of a I-section.
+- stren_flex_hss_rect
+    Calculate the flexural strength of a Rectangular-HSS section.
+
 """
 
 ##-----------------------------------------------------------------------------------------------------##
@@ -474,12 +471,42 @@ def stren_flex_i_y_F2_1(prop_mat, prop_sect):
     return Mn
 
 def stren_flex_i_ltb_F2_2(prop_mat, prop_sect, Lb, Cb):
-    
-    #AISC 360-22 F2
-      
+    """
+    Compute the flexural strength of an I-section considering lateral-torsional buckling (LTB)
+    per AISC 360-22, Section F2.2.
+
+    Arguments:
+        prop_mat (dict): Material properties containing:
+            - Fy (float): Yield stress (MPa)
+            - Es (float): Elastic modulus (MPa)
+        prop_sect (dict): Section properties containing:
+            - d_sect (float): Section depth (mm)
+            - tw_sect (float): Web thickness (mm)
+            - bf_sect (float): Flange width (mm)
+            - tf_sect (float): Flange thickness (mm)
+            - h_sect (float): Clear web height (mm)
+            - Ag_sect (float): Gross area (mm²)
+            - Ix_sect (float): Moment of inertia about x-axis (mm⁴)
+            - Iy_sect (float): Moment of inertia about y-axis (mm⁴)
+            - Sx_sect (float): Section modulus about x-axis (mm³)
+            - Sy_sect (float): Section modulus about y-axis (mm³)
+            - Zx_sect (float): Plastic section modulus about x-axis (mm³)
+            - Zy_sect (float): Plastic section modulus about y-axis (mm³)
+            - rx_sect (float): Radius of gyration about x-axis (mm)
+            - ry_sect (float): Radius of gyration about y-axis (mm)
+            - J_sect (float): Torsional constant (mm⁴)
+            - Cw_sect (float): Warping constant (mm⁶)
+        Lb (float): Unbraced length of the beam (mm)
+        Cb (float): Lateral-torsional buckling modification factor
+
+    Returns:
+        float: Nominal flexural strength Mn (kN·m)
+    """
+     # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -497,36 +524,70 @@ def stren_flex_i_ltb_F2_2(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
-    
+    # Calculate plastic moment (Mp) using a separate function
     Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect) #Calls function that calculates plastic moment
     
-    
+    # Calculate lateral-torsional buckling parameters
     c_sect = 1
-    ho_sect = d_sect-tf_sect
-    rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7
+    ho_sect = d_sect-tf_sect # Distance between flange centroids 
+    
+    # Radius of gyration for torsional buckling (Eq. F2-7)
+    rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
 
-
+    # Limiting unbraced lengths
     Lp = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
     Lr = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
 
+    # Elastic critical moment for LTB (Eq. F2-4)
     Fcr=Cb*math.pi**2*Es/((Lb/rts)**2)*sqrt(1+0.078*J_sect*c_sect/(Sx_sect*ho_sect)*(Lb/rts)**2) #F2-4
 
+    # Determine nominal flexural strength Mn
     if Lb<=Lp:
-        Mn = Mp
+        Mn = Mp # No lateral-torsional buckling
     elif Lb<=Lr:
-        Mn = min(Cb*(Mp-(Mp-0.7*Fy*Sx_sect)*((Lb-Lp)/(Lr-Lp))),Mp) #F2-2
+        Mn = min(Cb*(Mp-(Mp-0.7*Fy*Sx_sect)*((Lb-Lp)/(Lr-Lp))),Mp) #F2-2 Inelastic buckling
     else:
-        Mn = min(Fcr*Sx_sect,Mp) #F2-3
+        Mn = min(Fcr*Sx_sect,Mp) #F2-3 Elastic buckling
 
     return Mn
 
 def stren_flex_i_flb_F3_2(prop_mat, prop_sect, Lb, Cb):
-    
-    #AISC 360-22 F3
-      
+    """
+    Compute the flexural strength of an I-section considering flange local buckling (FLB)
+    per AISC 360-22, Section F3.2.
+
+    Arguments:
+        prop_mat (dict): Material properties containing:
+            - Fy (float): Yield stress (MPa)
+            - Es (float): Elastic modulus (MPa)
+        prop_sect (dict): Section properties containing:
+            - d_sect (float): Section depth (mm)
+            - tw_sect (float): Web thickness (mm)
+            - bf_sect (float): Flange width (mm)
+            - tf_sect (float): Flange thickness (mm)
+            - h_sect (float): Clear web height (mm)
+            - Ag_sect (float): Gross area (mm²)
+            - Ix_sect (float): Moment of inertia about x-axis (mm⁴)
+            - Iy_sect (float): Moment of inertia about y-axis (mm⁴)
+            - Sx_sect (float): Section modulus about x-axis (mm³)
+            - Sy_sect (float): Section modulus about y-axis (mm³)
+            - Zx_sect (float): Plastic section modulus about x-axis (mm³)
+            - Zy_sect (float): Plastic section modulus about y-axis (mm³)
+            - rx_sect (float): Radius of gyration about x-axis (mm)
+            - ry_sect (float): Radius of gyration about y-axis (mm)
+            - J_sect (float): Torsional constant (mm⁴)
+            - Cw_sect (float): Warping constant (mm⁶)
+        Lb (float): Unbraced length of the beam (mm) (Not used in this function)
+        Cb (float): Lateral-torsional buckling modification factor (Not used in this function)
+
+    Returns:
+        float: Nominal flexural strength Mn (N·mm)
+    """
+    # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -544,16 +605,20 @@ def stren_flex_i_flb_F3_2(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
     
+    # Calculate plastic moment (Mp) using a separate function
     Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect) #Calls function that calculates plastic moment
     
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
     lamb_r_flange= slend_flex["lamb_r_flange"]
     lamb_p_flange= slend_flex["lamb_p_flange"]
     
+    # Compute the flange buckling coefficient kc
     kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
 
+    # Determine nominal flexural strength Mn
     if slend_flange == "Noncompact":
         Mn = Mp-(Mp-0.7*Fy*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange)) #F3-1
     elif slend_flange == "Slender":
@@ -562,12 +627,42 @@ def stren_flex_i_flb_F3_2(prop_mat, prop_sect, Lb, Cb):
     return Mn
 
 def stren_flex_i_cfy_F4_1(prop_mat, prop_sect, Lb, Cb):
-    
-    #AISC 360-22 F4.1
-      
+    """
+    Compute the flexural strength of an I-section considering compression flange yielding (CFY)
+    per AISC 360-22, Section F4.1.
+
+    Arguments:
+        prop_mat (dict): Material properties containing:
+            - Fy (float): Yield stress (MPa)
+            - Es (float): Elastic modulus (MPa)
+        prop_sect (dict): Section properties containing:
+            - d_sect (float): Section depth (mm)
+            - tw_sect (float): Web thickness (mm)
+            - bf_sect (float): Flange width (mm)
+            - tf_sect (float): Flange thickness (mm)
+            - h_sect (float): Clear web height (mm)
+            - Ag_sect (float): Gross area (mm²)
+            - Ix_sect (float): Moment of inertia about x-axis (mm⁴)
+            - Iy_sect (float): Moment of inertia about y-axis (mm⁴)
+            - Sx_sect (float): Section modulus about x-axis (mm³)
+            - Sy_sect (float): Section modulus about y-axis (mm³)
+            - Zx_sect (float): Plastic section modulus about x-axis (mm³)
+            - Zy_sect (float): Plastic section modulus about y-axis (mm³)
+            - rx_sect (float): Radius of gyration about x-axis (mm)
+            - ry_sect (float): Radius of gyration about y-axis (mm)
+            - J_sect (float): Torsional constant (mm⁴)
+            - Cw_sect (float): Warping constant (mm⁶)
+        Lb (float): Unbraced length of the beam (mm) (Not used in this function)
+        Cb (float): Lateral-torsional buckling modification factor (Not used in this function)
+
+    Returns:
+        float: Nominal flexural strength Mn (N·mm)
+    """
+    # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -585,6 +680,7 @@ def stren_flex_i_cfy_F4_1(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
     
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -594,11 +690,16 @@ def stren_flex_i_cfy_F4_1(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
-
+    # Compute moment of inertia of the compression flange about its own axis
     Iyc_sect=1/12*tf_sect*bf_sect**3
+
+    # Compute yield moment
     Myc=Fy*Sx_sect #F4-4
+
+    # Compute plastic moment considering compactness
     Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
 
+    # Compute Rpc factor for strength adjustment
     if Iyc_sect/Iy_sect>0.23:
         if h_sect/tw_sect<=lamb_p_web:
             Rpc=Mp1/Myc #F4-9a
@@ -606,17 +707,49 @@ def stren_flex_i_cfy_F4_1(prop_mat, prop_sect, Lb, Cb):
             Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc) #F4-9b
     elif Iyc_sect/Iy_sect<=0.23:
         Rpc=1 #F4-10
-
+    
+    # Compute nominal flexural strength Mn
     Mn=Rpc*Myc #F4-1
     
     return Mn
 
 def stren_flex_i_ltb_F4_2(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F4.2
-      
+    """
+    Compute the flexural strength of an I-section considering lateral-torsional buckling (LTB)
+    per AISC 360-22, Section F4.2.
+
+    Arguments:
+        prop_mat (dict): Material properties containing:
+            - Fy (float): Yield stress (MPa)
+            - Es (float): Elastic modulus (MPa)
+        prop_sect (dict): Section properties containing:
+            - d_sect (float): Section depth (mm)
+            - tw_sect (float): Web thickness (mm)
+            - bf_sect (float): Flange width (mm)
+            - tf_sect (float): Flange thickness (mm)
+            - h_sect (float): Clear web height (mm)
+            - Ag_sect (float): Gross area (mm²)
+            - Ix_sect (float): Moment of inertia about x-axis (mm⁴)
+            - Iy_sect (float): Moment of inertia about y-axis (mm⁴)
+            - Sx_sect (float): Section modulus about x-axis (mm³)
+            - Sy_sect (float): Section modulus about y-axis (mm³)
+            - Zx_sect (float): Plastic section modulus about x-axis (mm³)
+            - Zy_sect (float): Plastic section modulus about y-axis (mm³)
+            - rx_sect (float): Radius of gyration about x-axis (mm)
+            - ry_sect (float): Radius of gyration about y-axis (mm)
+            - J_sect (float): Torsional constant (mm⁴)
+            - Cw_sect (float): Warping constant (mm⁶)
+        Lb (float): Unbraced length of the beam (mm)
+        Cb (float): Lateral-torsional buckling modification factor
+
+    Returns:
+        float: Nominal flexural strength Mn (N·mm)
+    """
+    # Material properties  
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
-
+    
+    # Section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -634,6 +767,7 @@ def stren_flex_i_ltb_F4_2(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -642,7 +776,8 @@ def stren_flex_i_ltb_F4_2(prop_mat, prop_sect, Lb, Cb):
     lamb_web= slend_flex["lamb_web"]
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
-   
+    
+    # Compute lateral-torsional buckling parameters
     aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
     rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
     FL = 0.7*Fy #F4-6a
@@ -651,10 +786,16 @@ def stren_flex_i_ltb_F4_2(prop_mat, prop_sect, Lb, Cb):
     Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
     Fcr = Cb*pi**2*Es/(Lb/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(Lb/rt)**2))) #F4-5
 
+    # Compute moment of inertia of the compression flange about its own axis (Eq. F4-8)
     Iyc_sect=1/12*tf_sect*bf_sect**3
+
+    # Compute yield moment
     Myc=Fy*Sx_sect #F4-4
+    
+    # Compute plastic moment considering compactness
     Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
 
+    # Compute Rpc factor for strength adjustment
     if Iyc_sect/Iy_sect>0.23:
         if h_sect/tw_sect<=lamb_p_web:
             Rpc=Mp1/Myc #F4-9a
@@ -663,21 +804,44 @@ def stren_flex_i_ltb_F4_2(prop_mat, prop_sect, Lb, Cb):
     elif Iyc_sect/Iy_sect<=0.23:
         Rpc=1 #F4-10
 
+    # Compute nominal flexural strength Mn
     if Lb<=Lp:
         Mn=Mp1
     elif Lb<=Lr:
         Mn=min(Cb*(Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*((Lb-Lp)/(Lr-Lp))),Rpc*Myc) #F4-2
     elif Lb>Lr:
-        Mn=min(Fcr*Sx,Rpc*Myc) #F4-3
+        Mn=min(Fcr*Sx_sect,Rpc*Myc) #F4-3
   
     return Mn
 
 def stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F4.3
-      
+    """
+    Compute the flexural strength of an I-section per AISC 360-22, Section F4.3.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - bf_sect: Flange width (mm)
+            - tf_sect: Flange thickness (mm)
+            - h_sect: Web depth (mm)
+            - tw_sect: Web thickness (mm)
+            - Sx_sect: Elastic section modulus about the x-axis (mm³)
+            - Zx_sect: Plastic section modulus about the x-axis (mm³)
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Bending coefficient.
+
+    Returns:
+        float: Nominal flexural strength Mn (N·mm).
+    """
+    # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
-
+    
+    # Section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -695,6 +859,7 @@ def stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -704,15 +869,20 @@ def stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
-
+    # Compute additional parameters
     kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
     FL = 0.7*Fy
+    
+    # Compute plastic moment considering compactness
     Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
 
+    # Compute moment of inertia of the compression flange about its own axis
     Iyc_sect=1/12*tf_sect*bf_sect**3
+    
+    # Compute yield moment
     Myc=Fy*Sx_sect
-    Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
 
+    # Compute Rpc factor for strength adjustment
     if Iyc_sect/Iy_sect>0.23:
         if h_sect/tw_sect<=lamb_p_web:
             Rpc=Mp1/Myc
@@ -721,6 +891,7 @@ def stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb):
     elif Iyc_sect/Iy_sect<=0.23:
         Rpc=1
 
+    # Compute nominal flexural strength Mn
     if slend_flange == "Compact":
         Mn=Mp1
     elif slend_flange == "Noncompact":
@@ -731,11 +902,43 @@ def stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb):
     return Mn
 
 def stren_flex_i_cfy_F5_1(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F5.1
-      
+    """
+    Compute the flexural strength of an I-section per AISC 360-22, Section F5.1.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect: Section depth (mm)
+            - tw_sect: Web thickness (mm)
+            - bf_sect: Flange width (mm)
+            - tf_sect: Flange thickness (mm)
+            - h_sect: Clear web height (mm)
+            - Ag_sect: Gross area (mm²)
+            - Ix_sect: Moment of inertia about x-axis (mm⁴)
+            - Iy_sect: Moment of inertia about y-axis (mm⁴)
+            - Sx_sect: Section modulus about x-axis (mm³)
+            - Sy_sect: Section modulus about y-axis (mm³)
+            - Zx_sect: Plastic section modulus about x-axis (mm³)
+            - Zy_sect: Plastic section modulus about y-axis (mm³)
+            - rx_sect: Radius of gyration about x-axis (mm)
+            - ry_sect: Radius of gyration about y-axis (mm)
+            - J_sect: Torsional constant (mm⁴)
+            - Cw_sect: Warping constant (mm⁶)
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Nominal flexural strength Mn (N·mm).
+    """
+    # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -753,6 +956,7 @@ def stren_flex_i_cfy_F5_1(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -762,20 +966,53 @@ def stren_flex_i_cfy_F5_1(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
-
+    # Compute adjustment factors
     aw = min(h_sect*tw_sect/(bf_sect*tf_sect),10) #F4-12
     Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
 
+    # Compute nominal flexural strength
     Mn = Rpg*Fy*Sx_sect
     
     return Mn
 
 def stren_flex_i_ltb_F5_2(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F5.2
-      
+    """
+    Compute the flexural strength of an I-section per AISC 360-22, Section F5.2.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect: Section depth (mm)
+            - tw_sect: Web thickness (mm)
+            - bf_sect: Flange width (mm)
+            - tf_sect: Flange thickness (mm)
+            - h_sect: Clear web height (mm)
+            - Ag_sect: Gross area (mm²)
+            - Ix_sect: Moment of inertia about x-axis (mm⁴)
+            - Iy_sect: Moment of inertia about y-axis (mm⁴)
+            - Sx_sect: Section modulus about x-axis (mm³)
+            - Sy_sect: Section modulus about y-axis (mm³)
+            - Zx_sect: Plastic section modulus about x-axis (mm³)
+            - Zy_sect: Plastic section modulus about y-axis (mm³)
+            - rx_sect: Radius of gyration about x-axis (mm)
+            - ry_sect: Radius of gyration about y-axis (mm)
+            - J_sect: Torsional constant (mm⁴)
+            - Cw_sect: Warping constant (mm⁶)
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Nominal flexural strength Mn (N·mm).
+    """
+    # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -793,6 +1030,7 @@ def stren_flex_i_ltb_F5_2(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -802,13 +1040,17 @@ def stren_flex_i_ltb_F5_2(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
+    # Limiting laterally unbraced length for full plastic strength
     Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
     aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
     rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
     Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
+    # Limiting laterally unbraced length for inelastic buckling
     Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
+    # Plastic moment capacity considering compactness
     Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
 
+    # Compute nominal flexural strength
     if Lb<= Lp:
         Mn =  Mp1
     elif Lb<=Lr:
@@ -821,11 +1063,43 @@ def stren_flex_i_ltb_F5_2(prop_mat, prop_sect, Lb, Cb):
     return Mn
 
 def stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F5.2
-      
+    """
+    Compute the flexural strength of an I-section per AISC 360-22, Section F5.3.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect: Section depth (mm)
+            - tw_sect: Web thickness (mm)
+            - bf_sect: Flange width (mm)
+            - tf_sect: Flange thickness (mm)
+            - h_sect: Clear web height (mm)
+            - Ag_sect: Gross area (mm²)
+            - Ix_sect: Moment of inertia about x-axis (mm⁴)
+            - Iy_sect: Moment of inertia about y-axis (mm⁴)
+            - Sx_sect: Section modulus about x-axis (mm³)
+            - Sy_sect: Section modulus about y-axis (mm³)
+            - Zx_sect: Plastic section modulus about x-axis (mm³)
+            - Zy_sect: Plastic section modulus about y-axis (mm³)
+            - rx_sect: Radius of gyration about x-axis (mm)
+            - ry_sect: Radius of gyration about y-axis (mm)
+            - J_sect: Torsional constant (mm⁴)
+            - Cw_sect: Warping constant (mm⁶)
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Nominal flexural strength Mn (N·mm).
+    """
+    # Extract material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Extract section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -843,6 +1117,7 @@ def stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -854,8 +1129,10 @@ def stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb):
 
     
     kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
+    # Plastic moment capacity considering compactness
     Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
 
+    # Compute nominal flexural strength based on flange slenderness category
     if slend_flange == "Compact":
         Mn = Mp1
     elif slend_flange == "Noncompact":
@@ -868,11 +1145,30 @@ def stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb):
     return Mn
 
 def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F
-      
+    """
+    Compute the nominal flexural strength of an I-section per AISC 360-22, Section F.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect, tw_sect, bf_sect, tf_sect, h_sect, Ag_sect
+            - Ix_sect, Iy_sect, Sx_sect, Sy_sect, Zx_sect, Zy_sect
+            - rx_sect, ry_sect, J_sect, Cw_sect
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Factored nominal flexural strength (N·mm).
+    """
+    # Extract material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Extract section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -890,6 +1186,7 @@ def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -900,6 +1197,7 @@ def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
+    # Determine flexural strength based on slenderness classification
     if slend_web == "Compact":
         if slend_flange == "Compact":
             #2.1
@@ -935,18 +1233,38 @@ def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
         Mn_F5_3 = stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb)
 
         Mn_fin=min(Mn_F5_1,Mn_F5_2,Mn_F5_3)
-        
-        phi_b = 0.90 #
-
-        Mres = phi_b*Mn_fin
+    
+    # Apply resistance factor
+    phi_b = 0.90 #
+    Mres = phi_b*Mn_fin
+    
     return Mres
 
-def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F7.1
-      
+def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):   
+    """
+    Compute the nominal flexural strength of a rectangular HSS section per AISC 360-22, Section F7.1.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect, tw_sect, bf_sect, tf_sect, Ag_sect
+            - Ix_sect, Iy_sect, Sx_sect, Sy_sect, Zx_sect, Zy_sect
+            - rx_sect, ry_sect, J_sect, sect_type
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Nominal flexural strength (N·mm).
+    """
+    # Extract material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Extract section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -963,6 +1281,7 @@ def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     sect_type = prop_sect["sect_type"]
 
+    # Compute slenderness parameters
     slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -973,17 +1292,37 @@ def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
+    # Compute plastic moment capacity
     Mp = Fy*Zx_sect #F7-1
     Mn = Mp
 
     return Mn
 
 def stren_flex_hss_rect_flb_F7_2(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F7.2
-      
+    """
+    Compute the nominal flexural strength of a rectangular HSS per AISC 360-22, Section F7.2.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect, tw_sect, bf_sect, tf_sect, Ag_sect
+            - Ix_sect, Iy_sect, Sx_sect, Sy_sect, Zx_sect, Zy_sect
+            - rx_sect, ry_sect, J_sect, sect_type
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Nominal flexural strength (N·mm).
+    """
+    # Extract material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Extract section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -1000,6 +1339,7 @@ def stren_flex_hss_rect_flb_F7_2(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     sect_type = prop_sect["sect_type"]
 
+    # Compute slenderness parameters
     slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -1010,6 +1350,7 @@ def stren_flex_hss_rect_flb_F7_2(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
+    # Plastic moment
     Mp = Fy*Zx_sect #F7-1
 
     if slend_flange == "Compact":
@@ -1034,11 +1375,30 @@ def stren_flex_hss_rect_flb_F7_2(prop_mat, prop_sect, Lb, Cb):
     return Mn
 
 def stren_flex_hss_rect_wlb_F7_3(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F7.3
-      
+    """
+    Compute the nominal flexural strength of a rectangular HSS per AISC 360-22, Section F7.3.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect, tw_sect, bf_sect, tf_sect, Ag_sect
+            - Ix_sect, Iy_sect, Sx_sect, Sy_sect, Zx_sect, Zy_sect
+            - rx_sect, ry_sect, J_sect, sect_type
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Nominal flexural strength (N·mm).
+    """
+    # Extract material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Extract section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -1091,11 +1451,30 @@ def stren_flex_hss_rect_wlb_F7_3(prop_mat, prop_sect, Lb, Cb):
     return Mn
 
 def stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F7.4
-      
+    """
+    Compute the nominal flexural strength of a rectangular HSS considering lateral-torsional buckling per AISC 360-22, Section F7.4.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect, tw_sect, bf_sect, tf_sect, Ag_sect
+            - Ix_sect, Iy_sect, Sx_sect, Sy_sect, Zx_sect, Zy_sect
+            - rx_sect, ry_sect, J_sect, sect_type
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Nominal flexural strength (N·mm).
+    """
+    # Extract material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
+    # Extract section properties
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -1112,6 +1491,7 @@ def stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     sect_type = prop_sect["sect_type"]
 
+    # Compute plastic moment
     slend_flex = slend_hss_rect_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation   
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -1122,11 +1502,14 @@ def stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
 
+    # Compute plastic moment
     Mp = Fy*Zx_sect #F7-1
 
+    # Compute lateral-torsional buckling limits
     Lp = 0.13*Es*ry_sect*sqrt(J_sect*Ag_sect)/Mp #F7-12
     Lr = 2*Es*ry_sect*sqrt(J_sect*Ag_sect)/(0.7*Fy*Sx_sect) #F7-13
 
+    # Compute nominal flexural strength based on Lb range
     if Lb<=Lp:
         Mn = Mp
     elif Lb<=Lr:
@@ -1137,8 +1520,26 @@ def stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb):
     return Mn
 
 def stren_flex_hss_rect(prop_mat, prop_sect, Lb, Cb):
-    #AISC 360-22 F
-      
+    """
+    Compute the nominal flexural strength of a rectangular HSS per AISC 360-22, Section F.
+    
+    Parameters:
+        prop_mat (dict): Material properties including:
+            - Fy: Yield strength (MPa)
+            - Es: Elastic modulus (MPa)
+        
+        prop_sect (dict): Section properties including:
+            - d_sect, tw_sect, bf_sect, tf_sect, h_sect, Ag_sect
+            - Ix_sect, Iy_sect, Sx_sect, Sy_sect, Zx_sect, Zy_sect
+            - rx_sect, ry_sect, J_sect, Cw_sect
+        
+        Lb (float): Unbraced length of the beam (mm).
+        Cb (float): Lateral-torsional buckling modification factor.
+
+    Returns:
+        float: Factored flexural strength (N·mm).
+    """
+    # Extract material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
@@ -1159,6 +1560,7 @@ def stren_flex_hss_rect(prop_mat, prop_sect, Lb, Cb):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
+    # Compute slenderness parameters
     slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
     slend_flange = slend_flex["slend_flange"]
     lamb_flange= slend_flex["lamb_flange"]
@@ -1169,15 +1571,17 @@ def stren_flex_hss_rect(prop_mat, prop_sect, Lb, Cb):
     lamb_r_web= slend_flex["lamb_r_web"]
     lamb_p_web= slend_flex["lamb_p_web"]
     
+    # Compute nominal moment capacities based on different limit states
     Mn_F7_1 = stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb)
     Mn_F7_2 = stren_flex_hss_rect_flb_F7_2(prop_mat, prop_sect, Lb, Cb)
     Mn_F7_3 = stren_flex_hss_rect_wlb_F7_3(prop_mat, prop_sect, Lb, Cb)
     Mn_F7_4 = stren_flex_hss_rect_ltb_F7_4(prop_mat, prop_sect, Lb, Cb)
 
+    # Determine controlling nominal moment
     Mn_fin=min(Mn_F7_1,Mn_F7_2,Mn_F7_3,Mn_F7_4)
-        
+    
+    # Apply resistance factor
     phi_b = 0.90
-
     Mres = phi_b*Mn_fin
 
     return Mres
