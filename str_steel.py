@@ -502,7 +502,7 @@ def stren_flex_i_ltb_F2_2(prop_mat, prop_sect, Lb, Cb):
     Returns:
         float: Nominal flexural strength Mn (kN·m)
     """
-     # Material properties
+    # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
 
@@ -1041,9 +1041,9 @@ def stren_flex_i_ltb_F5_2(prop_mat, prop_sect, Lb, Cb):
     lamb_p_web= slend_flex["lamb_p_web"]
 
     # Limiting laterally unbraced length for full plastic strength
-    Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
     aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
     rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+    Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
     Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
     # Limiting laterally unbraced length for inelastic buckling
     Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
@@ -1131,6 +1131,8 @@ def stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb):
     kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
     # Plastic moment capacity considering compactness
     Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+    aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+    Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
 
     # Compute nominal flexural strength based on flange slenderness category
     if slend_flange == "Compact":
@@ -1919,7 +1921,7 @@ def slend_i_s(prop_mat, prop_sect,element_type,struct_syst,axial_load=0):
     return slend_i_s
 
 def slend_hss_rect_flex_ns(prop_mat, prop_sect):
-
+    
     # Extract material properties
     Fy = prop_mat["Fy"]  # Yield stress
     Es = prop_mat["Es"]  # Modulus of elasticity
@@ -1972,3 +1974,97 @@ def slend_hss_rect_flex_ns(prop_mat, prop_sect):
     } 
 
     return slend_flex_ns
+
+
+
+##-----------------------------------------------------------------------------------------------------##
+##--------------------------------------------GRAPHIC FUNCTIONS----------------------------
+##-----------------------------------------------------------------------------------------------------##
+
+def graf_flex_i(prop_mat,prop_sect):
+    # Material properties
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    # Section properties
+    sect_name = prop_sect["sect_name"]
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
+
+    
+    # Calculate lateral-torsional buckling parameters
+    Cb=1
+    c_sect = 1
+    ho_sect = d_sect-tf_sect # Distance between flange centroids 
+
+    # Radius of gyration for torsional buckling (Eq. F2-7)
+    rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
+
+    # Limiting unbraced lengths
+    Lp = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
+    Lr = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
+
+    
+    #Calcula los valores de soporte lateral de referencia
+    Lp_graf = Lp/1000 #Lp en metros
+    Lr_graf = Lr/1000 #Lr en metros
+    Lb_max = int(3*Lr) #Máximo valor de Lb graficado
+
+    #Calcula los valores de momento de referencia
+    
+    Mp = str_steel.stren_flex_i_y_F2_1(prop_mat, prop_sect)*0.9
+    Mp_graf = Mp/1000000
+    Mr = str_steel.stren_flex_i(prop_mat,prop_sect,Lr,Cb)
+    Mr_graf = Mr/1000000
+
+    #Genera vectores con todos los valores de Lb y Mres
+    vect_lb=[] #Vector que almacena los valores de Lb
+    vect_Mgraf=[] #Vector que almacena los valores de momento resistente
+    #Iteración para calcular los pares de puntos Lb y Mresist
+    for Lb_graf in range (10,Lb_max,100):
+        vect_lb.append(Lb_graf/1000)
+        Mgraf = str_steel.stren_flex_i(prop_mat,prop_sect,Lb_graf,Cb)
+        vect_Mgraf.append(Mgraf/1000000)
+    
+    #Define título general y textos de ejes
+    plt.figure().set_figwidth(15)
+    plt.plot(vect_lb, vect_Mgraf)
+    plt.ylabel('Mres (KN*m)')
+    plt.xlabel('Lb (m)')
+    plt.title("["+sect_name+"]"+ " Lb vs Mom resist")
+    
+    #Crea lineas de corte para valores de Lp y Lr
+    plt.axvline(x = Lp_graf, color = 'g', label = "Lp") #Linea Lp
+    plt.axvline(x = Lr_graf, color = 'g', label = "Lp") #Linea Lr
+    plt.text(Lp_graf, min(vect_Mgraf), f"Lp = {Lp_graf:.2f} m", 
+            color='g', fontsize=12, ha='right', rotation=90)
+    plt.text(Lr_graf, min(vect_Mgraf), f"Lr = {Lr_graf:.2f} m", 
+            color='r', fontsize=12, ha='right', rotation=90)
+
+    #Crea puntos con momentos Mp y Mr 
+    plt.text(Lp_graf, Mp_graf, f"Mp = {Mp_graf:.2f} kN*m", 
+            color='r', fontsize=12, ha='left',va='bottom', rotation=0)
+    plt.text(Lr_graf, Mr_graf, f"Mr = {Mr_graf:.2f} kN*m", 
+            color='r', fontsize=12, ha='left',va='bottom', rotation=0)
+
+
+    plt.xticks(np.arange(0, round(vect_lb[-1]), 1))
+    plt.yticks(np.arange(0, Mp_graf*1.3,round(Mp_graf*1.1/5)))
+    plt.xlim(0, max(vect_lb))
+    plt.show()
+
+    print(Mp_graf)
