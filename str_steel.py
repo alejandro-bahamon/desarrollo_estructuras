@@ -2026,9 +2026,9 @@ def graf_flex_i(prop_mat,prop_sect):
 
     #Calcula los valores de momento de referencia
     
-    Mp = str_steel.stren_flex_i_y_F2_1(prop_mat, prop_sect)*0.9
+    Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect)*0.9
     Mp_graf = Mp/1000000
-    Mr = str_steel.stren_flex_i(prop_mat,prop_sect,Lr,Cb)
+    Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)
     Mr_graf = Mr/1000000
 
     #Genera vectores con todos los valores de Lb y Mres
@@ -2037,7 +2037,7 @@ def graf_flex_i(prop_mat,prop_sect):
     #Iteración para calcular los pares de puntos Lb y Mresist
     for Lb_graf in range (10,Lb_max,100):
         vect_lb.append(Lb_graf/1000)
-        Mgraf = str_steel.stren_flex_i(prop_mat,prop_sect,Lb_graf,Cb)
+        Mgraf = stren_flex_i(prop_mat,prop_sect,Lb_graf,Cb)
         vect_Mgraf.append(Mgraf/1000000)
     
     #Define título general y textos de ejes
