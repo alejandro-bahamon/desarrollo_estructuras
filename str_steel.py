@@ -1981,7 +1981,7 @@ def slend_hss_rect_flex_ns(prop_mat, prop_sect):
 ##--------------------------------------------GRAPHIC FUNCTIONS----------------------------
 ##-----------------------------------------------------------------------------------------------------##
 
-def graf_flex_i(prop_mat,prop_sect):
+def graf_flex_i(prop_mat,prop_sect,Cb):
     # Material properties
     Fy = prop_mat["Fy"]
     Es = prop_mat["Es"]
@@ -2005,30 +2005,82 @@ def graf_flex_i(prop_mat,prop_sect):
     J_sect = prop_sect["J_sect"]
     Cw_sect = prop_sect["Cw_sect"]
 
-    
-    # Calculate lateral-torsional buckling parameters
-    Cb=1
-    c_sect = 1
-    ho_sect = d_sect-tf_sect # Distance between flange centroids 
+    # Compute slenderness parameters
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web= slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
 
-    # Radius of gyration for torsional buckling (Eq. F2-7)
-    rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
+   
+    # Determine flexural strength based on slenderness classification
+    if slend_web == "Compact":
+        # Calculate lateral-torsional buckling parameters
+        c_sect = 1
+        ho_sect = d_sect-tf_sect # Distance between flange centroids 
 
-    # Limiting unbraced lengths
-    Lp = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
-    Lr = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
+        # Radius of gyration for torsional buckling (Eq. F2-7)
+        rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
+        
+        # Limiting unbraced lengths
+        Lp = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
+        Lr = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
 
-    
+        if slend_flange == "Compact":
+
+            Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect)*.9
+            Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)
+           
+        else:
+            Mplastif = stren_flex_i_y_F2_1(prop_mat, prop_sect)
+            if slend_flange == "Noncompact":
+                Mp1 = (Mplastif-(Mplastif-0.7*Fy*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange)))*.9 #F3-1
+            elif slend_flange == "Slender":
+                Mp1 = 0.9*Es*kc*Sx_sect/(lamb_flange**2) #F3-2
+            Mp=Mp1
+            Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)
+
+            Lb_obj = (Mplastif-(Mp1/(0.9*Cb)))/(Mplastif-0.7*Fy*Sx_sect)*(Lr-Lp)+Lp
+            Lp = Lb_obj
+
+    elif slend_web == "Noncompact":
+        aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+        rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+        FL = 0.7*Fy #F4-6a
+
+        # Limiting unbraced lengths
+        Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+        Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
+
+        # Plastic moment capacity considering compactness
+        Mp = min(Zx_sect*Fy,1.6*Sx_sect*Fy)*.9
+        Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)
+
+    elif slend_web == "Slender":
+        # Limiting laterally unbraced length for full plastic strength
+        aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+        rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+        Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+        Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
+
+        # Limiting laterally unbraced length for inelastic buckling
+        Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
+        # Plastic moment capacity considering compactness
+        Mp = min(Zx_sect*Fy,1.6*Sx_sect*Fy)*.9
+        Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)
+
+
     #Calcula los valores de soporte lateral de referencia
     Lp_graf = Lp/1000 #Lp en metros
     Lr_graf = Lr/1000 #Lr en metros
     Lb_max = int(3*Lr) #Máximo valor de Lb graficado
 
     #Calcula los valores de momento de referencia
-    
-    Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect)*0.9
     Mp_graf = Mp/1000000
-    Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)
     Mr_graf = Mr/1000000
 
     #Genera vectores con todos los valores de Lb y Mres
