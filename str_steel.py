@@ -1171,6 +1171,7 @@ def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
     Es = prop_mat["Es"]
 
     # Extract section properties
+    sect_name= prop_sect["sect_name"]
     d_sect = prop_sect["d_sect"]
     tw_sect = prop_sect["tw_sect"]
     bf_sect = prop_sect["bf_sect"]
@@ -1238,9 +1239,17 @@ def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
     
     # Apply resistance factor
     phi_b = 0.90 #
+
     Mres = phi_b*Mn_fin
+
+    salida_flex = {
+        "sect_name":sect_name,
+        "slend_web":slend_web,
+        "slend_flange":slend_flange,
+        "Mres":Mres
+    }  
     
-    return Mres
+    return salida_flex
 
 def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):   
     """
@@ -2040,6 +2049,7 @@ def graf_flex_i(prop_mat,prop_sect,Cb):
             if slend_flange == "Noncompact":
                 Mp1 = (Mplastif-(Mplastif-0.7*Fy*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange)))*.9 #F3-1
             elif slend_flange == "Slender":
+                kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
                 Mp1 = 0.9*Es*kc*Sx_sect/(lamb_flange**2) #F3-2
             Mp=Mp1
             Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)
