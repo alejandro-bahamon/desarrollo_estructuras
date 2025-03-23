@@ -924,7 +924,6 @@ def stren_flex_i_ltb_F4_3(prop_mat, prop_sect, Lb, Cb):
     }  
     return salida_flex
 
-
 def stren_flex_i_cfy_F5_1(prop_mat, prop_sect, Lb, Cb):
     """
     Compute the flexural strength of an I-section per AISC 360-22, Section F5.1.
@@ -1181,7 +1180,6 @@ def stren_flex_i_flb_F5_3(prop_mat, prop_sect, Lb, Cb):
     }  
     return salida_flex
 
-
 def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
     """
     Compute the nominal flexural strength of an I-section per AISC 360-22, Section F.
@@ -1286,6 +1284,313 @@ def stren_flex_i(prop_mat, prop_sect, Lb, Cb):
     }  
     
     return salida_flex
+
+def stren_flex_i_unb_leng (prop_mat,prop_sect,Cb):
+
+    # Material properties
+    Fy = prop_mat["Fy"]
+    Es = prop_mat["Es"]
+
+    # Section properties
+    sect_name = prop_sect["sect_name"]
+    d_sect = prop_sect["d_sect"]
+    tw_sect = prop_sect["tw_sect"]
+    bf_sect = prop_sect["bf_sect"]
+    tf_sect = prop_sect["tf_sect"]
+    h_sect = prop_sect["h_sect"]
+    Ag_sect = prop_sect["Ag_sect"]
+    Ix_sect = prop_sect["Ix_sect"]
+    Iy_sect = prop_sect["Iy_sect"]
+    Sx_sect = prop_sect["Sx_sect"]
+    Sy_sect = prop_sect["Sy_sect"]
+    Zx_sect = prop_sect["Zx_sect"]
+    Zy_sect = prop_sect["Zy_sect"]
+    rx_sect = prop_sect["rx_sect"]
+    ry_sect = prop_sect["ry_sect"]
+    J_sect = prop_sect["J_sect"]
+    Cw_sect = prop_sect["Cw_sect"]
+
+    # Compute slenderness parameters
+    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
+    slend_flange = slend_flex["slend_flange"]
+    lamb_flange= slend_flex["lamb_flange"]
+    lamb_r_flange= slend_flex["lamb_r_flange"]
+    lamb_p_flange= slend_flex["lamb_p_flange"]
+    slend_web= slend_flex["slend_web"]
+    lamb_web= slend_flex["lamb_web"]
+    lamb_r_web= slend_flex["lamb_r_web"]
+    lamb_p_web= slend_flex["lamb_p_web"]
+
+
+    if slend_web == "Compact":
+        if slend_flange == "Compact":
+            # Calculate lateral-torsional buckling parameters
+            c_sect = 1
+            ho_sect = d_sect-tf_sect # Distance between flange centroids 
+            
+            # Radius of gyration for torsional buckling (Eq. F2-7)
+            rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
+
+            # Limiting unbraced lengths
+            L1 = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
+            L2 = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
+
+            Mn1 = Fy * Zx_sect
+            Mn2 = stren_flex_i_ltb_F2_2(prop_mat, prop_sect, L2, Cb)["Mn"]
+        
+        elif slend_flange == "Noncompact":
+
+            Mr_F3_2 = stren_flex_i_flb_F3_2(prop_mat, prop_sect, 1, Cb)["Mn"]
+            
+            # Calculate plastic moment (Mp) using a separate function
+            Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect)["Mn"] #Calls function that calculates plastic moment
+            
+            # Calculate lateral-torsional buckling parameters
+            c_sect = 1
+            ho_sect = d_sect-tf_sect # Distance between flange centroids 
+            
+            # Radius of gyration for torsional buckling (Eq. F2-7)
+            rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
+
+            # Limiting unbraced lengths
+            Lp = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
+            Lr = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
+
+            # Elastic critical moment for LTB (Eq. F2-4)
+            Fcr_lr=Cb*math.pi**2*Es/((Lr/rts)**2)*sqrt(1+0.078*J_sect*c_sect/(Sx_sect*ho_sect)*(Lr/rts)**2) #F2-4
+
+            # Determine nominal flexural strength Mn
+            Mn1 = Mr_F3_2
+            Mn2 = min(Fcr_lr*Sx_sect,Mp) #F2-3 Elastic buckling
+
+            L1 = ((Mp-Mn1/Cb)*(Lr-Lp)/(Mp-0.7*Fy*Sx_sect))+Lp
+            L2 = ((Mp-Mn2/Cb)*(Lr-Lp)/(Mp-0.7*Fy*Sx_sect))+Lp
+
+        elif slend_flange == "Slender":
+            
+            Mr_F3_2 = stren_flex_i_flb_F3_2(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1 = Mr_F3_2
+            Mn2 = Mr_F3_2
+
+            rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
+            c_sect = 1
+            ho_sect = d_sect-tf_sect # Distance between flange centroids 
+
+
+            # Calcular los términos de la ecuación
+            term1 = 0.384914571642485 * (Cb**2 * Es**2 * J_sect * Sx_sect * c_sect) / (Mr_F3_2**2 * ho_sect)
+            term2 = Cb * Es * Sx_sect / (Mr_F3_2**2 * ho_sect)
+            raiz_interna = 0.148159227462718 * Cb**2 * Es**2 * J_sect**2 * c_sect**2 + Mr_F3_2**2 * ho_sect**2
+
+            # Verificar si la raíz interna es positiva
+            if raiz_interna < 0:
+                return "Error: No hay soluciones reales para Lb"
+
+            raiz_valor = math.sqrt(raiz_interna)
+
+            # Verificar si term1 - term2 * raiz_valor es negativo
+            if term1 - term2 * raiz_valor < 0:
+                Lb_1 = None  # No tiene solución real
+            else:
+                Lb_1 = math.pi * rts * math.sqrt(term1 - term2 * raiz_valor)
+
+            if term1 + term2 * raiz_valor < 0:
+                Lb_2 = None  # No tiene solución real
+            else:
+                Lb_2 = math.pi * rts * math.sqrt(term1 + term2 * raiz_valor)
+
+            # Filtrar solo soluciones reales y positivas
+            L2 = float([Lb for Lb in [Lb_1, Lb_2] if Lb is not None and Lb > 0][0])
+            L1 = L2   
+    if slend_web == "Noncompact":
+
+        if slend_flange == "Compact":
+            Mn1_1 = stren_flex_i_cfy_F4_1(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1_3 = stren_flex_i_ltb_F4_3(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1 = min(Mn1_1,Mn1_3)
+
+            # Compute lateral-torsional buckling parameters
+            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+            FL = 0.7*Fy #F4-6a
+
+            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+            Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
+
+            L1 = Lp
+            L2 = Lr
+            Fcr = Cb*pi**2*Es/(L2/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(L2/rt)**2))) #F4-5
+
+            # Compute moment of inertia of the compression flange about its own axis (Eq. F4-8)
+            Iyc_sect=1/12*tf_sect*bf_sect**3
+
+            # Compute yield moment
+            Myc=Fy*Sx_sect #F4-4
+            
+            # Compute plastic moment considering compactness
+            Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+            # Compute Rpc factor for strength adjustment
+            if Iyc_sect/Iy_sect>0.23:
+                if h_sect/tw_sect<=lamb_p_web:
+                    Rpc=Mp1/Myc #F4-9a
+                elif h_sect/tw_sect>lamb_p_web:
+                    Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc) #F4-9b
+            elif Iyc_sect/Iy_sect<=0.23:
+                Rpc=1 #F4-10
+
+            Mn2=min(Cb*(Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*((L2-Lp)/(Lr-Lp))),Rpc*Myc) #F4-2
+        elif slend_flange == "Noncompact":
+            
+            Mn1_1 = stren_flex_i_cfy_F4_1(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1_3 = stren_flex_i_ltb_F4_3(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1 = min(Mn1_1,Mn1_3)
+
+            # Compute lateral-torsional buckling parameters
+            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+            FL = 0.7*Fy #F4-6a
+
+            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+            Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
+
+            L1 = Lp
+            L2 = Lr
+            Fcr = Cb*pi**2*Es/(L2/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(L2/rt)**2))) #F4-5
+
+
+            # Compute moment of inertia of the compression flange about its own axis (Eq. F4-8)
+            Iyc_sect=1/12*tf_sect*bf_sect**3
+
+            # Compute yield moment
+            Myc=Fy*Sx_sect #F4-4
+            
+            # Compute plastic moment considering compactness
+            Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+            # Compute Rpc factor for strength adjustment
+            if Iyc_sect/Iy_sect>0.23:
+                if h_sect/tw_sect<=lamb_p_web:
+                    Rpc=Mp1/Myc #F4-9a
+                elif h_sect/tw_sect>lamb_p_web:
+                    Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc) #F4-9b
+            elif Iyc_sect/Iy_sect<=0.23:
+                Rpc=1 #F4-10
+
+            
+            L1 = (Rpc*Myc-Mn1/Cb)/(Rpc*Myc-FL*Sx_sect)*(Lr-Lp)+Lp
+            
+                        
+            Mn2=min(Cb*(Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*((L2-Lp)/(Lr-Lp))),Rpc*Myc) #F4-2
+
+            L2 = (Rpc*Myc-Mn2/Cb)/(Rpc*Myc-FL*Sx_sect)*(Lr-Lp)+Lp      
+        elif slend_flange == "Slender":     
+            Mn1_1 = stren_flex_i_cfy_F4_1(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1_3 = stren_flex_i_ltb_F4_3(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1 = min(Mn1_1,Mn1_3)
+            Mn2 = min(Mn1_1,Mn1_3)
+
+            # Compute lateral-torsional buckling parameters
+            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+            FL = 0.7*Fy #F4-6a
+
+            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+            Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
+            Fcr = Cb*pi**2*Es/(Lb/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(Lb/rt)**2))) #F4-5
+
+            # Compute moment of inertia of the compression flange about its own axis (Eq. F4-8)
+            Iyc_sect=1/12*tf_sect*bf_sect**3
+
+            # Calcular los términos de la ecuación
+            term1 = 0.384914571642485 * (Cb**2 * Es**2 * J_sect * Sx_sect ) / (Mn1**2 * ho_sect)
+            term2 = Cb * Es * Sx_sect / (Mn1**2 * ho_sect)
+            raiz_interna = 0.148159227462718 * Cb**2 * Es**2 * J_sect**2 * + Mn1**2 * ho_sect**2
+
+            # Verificar si la raíz interna es positiva
+            if raiz_interna < 0:
+                return "Error: No hay soluciones reales para Lb"
+
+            raiz_valor = math.sqrt(raiz_interna)
+
+            # Verificar si term1 - term2 * raiz_valor es negativo
+            if term1 - term2 * raiz_valor < 0:
+                Lb_1 = None  # No tiene solución real
+            else:
+                Lb_1 = math.pi * rt * math.sqrt(term1 - term2 * raiz_valor)
+
+            if term1 + term2 * raiz_valor < 0:
+                Lb_2 = None  # No tiene solución real
+            else:
+                Lb_2 = math.pi * rt * math.sqrt(term1 + term2 * raiz_valor)
+
+            # Filtrar solo soluciones reales y positivas
+            L2 = float([Lb for Lb in [Lb_1, Lb_2] if Lb is not None and Lb > 0][0])
+            L1 = L2   
+    if slend_web == "Slender":
+
+        if slend_flange == "Compact":
+            Mn1_1 = stren_flex_i_cfy_F5_1(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1_3 = stren_flex_i_flb_F5_3(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1 = min(Mn1_1,Mn1_3)
+
+            # Limiting laterally unbraced length for full plastic strength
+            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+            Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
+            # Limiting laterally unbraced length for inelastic buckling
+            Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
+            # Plastic moment capacity considering compactness
+            Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+
+            L1 = Lp
+            L2 = Lr
+            Fcr = Cb*pi**2*Es/(L2/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(L2/rt)**2))) #F4-5
+
+            Fcr1 = min(Cb*(Fy-(0.3*Fy)*((L2-Lp)/(Lr-Lp))),Fy) #F5-3
+            Mn = Rpg*Fcr1*Sx_sect
+            Mn1 = Mn
+
+            Fcr2 = min(Cb*pi**2*Es/((L2/rt)**2),Fy)
+            Mn2 = Rpg*Fcr2*Sx_sect
+        elif slend_flange == "Noncompact":
+            Mn1_1 = stren_flex_i_cfy_F5_1(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1_3 = stren_flex_i_flb_F5_3(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1 = min(Mn1_1,Mn1_3)
+
+            # Limiting laterally unbraced length for full plastic strength
+            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+            Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
+            # Limiting laterally unbraced length for inelastic buckling
+            Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
+            # Plastic moment capacity considering compactness
+            Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
+            Fcr = min(Cb*(Fy-(0.3*Fy)),Fy)
+            Mn2 = Rpg*Fcr*Sx_sect
+            L1 = (Fy-(Mn1/(Rpg*Sx_sect*Cb)))*((Lr-Lp)/(0.3*Fy))+Lp
+            L2 = (Fy-(Mn2/(Rpg*Sx_sect*Cb)))*((Lr-Lp)/(0.3*Fy))+Lp
+        elif slend_flange == "Slender":
+            Mn1_1 = stren_flex_i_cfy_F5_1(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1_3 = stren_flex_i_flb_F5_3(prop_mat, prop_sect, 1, Cb)["Mn"]
+            Mn1 = min(Mn1_1,Mn1_3)
+            Mn2 = Mn1
+
+            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
+            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
+            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
+            Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
+
+            L1 = sqrt(Rpg*Sx_sect*Cb*pi**2*Es*rt**2/Mn2)
+            L2=L1
+
+    unb_len = {"Mn1":Mn1,
+                "L1":L1,
+                "Mn2":Mn2,
+                "L2":L2}
+    return unb_len
 
 def stren_flex_hss_rect_y_F7_1(prop_mat, prop_sect, Lb, Cb):   
     """
@@ -2020,391 +2325,28 @@ def slend_hss_rect_flex_ns(prop_mat, prop_sect):
 
     return slend_flex_ns
 
-
-
 ##-----------------------------------------------------------------------------------------------------##
 ##--------------------------------------------GRAPHIC FUNCTIONS----------------------------
 ##-----------------------------------------------------------------------------------------------------##
 
-def stren_flex_unb_leng (prop_mat,prop_sect,Cb):
-
-    # Material properties
-    Fy = prop_mat["Fy"]
-    Es = prop_mat["Es"]
-
-    # Section properties
-    sect_name = prop_sect["sect_name"]
-    d_sect = prop_sect["d_sect"]
-    tw_sect = prop_sect["tw_sect"]
-    bf_sect = prop_sect["bf_sect"]
-    tf_sect = prop_sect["tf_sect"]
-    h_sect = prop_sect["h_sect"]
-    Ag_sect = prop_sect["Ag_sect"]
-    Ix_sect = prop_sect["Ix_sect"]
-    Iy_sect = prop_sect["Iy_sect"]
-    Sx_sect = prop_sect["Sx_sect"]
-    Sy_sect = prop_sect["Sy_sect"]
-    Zx_sect = prop_sect["Zx_sect"]
-    Zy_sect = prop_sect["Zy_sect"]
-    rx_sect = prop_sect["rx_sect"]
-    ry_sect = prop_sect["ry_sect"]
-    J_sect = prop_sect["J_sect"]
-    Cw_sect = prop_sect["Cw_sect"]
-
-    # Compute slenderness parameters
-    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
-    slend_flange = slend_flex["slend_flange"]
-    lamb_flange= slend_flex["lamb_flange"]
-    lamb_r_flange= slend_flex["lamb_r_flange"]
-    lamb_p_flange= slend_flex["lamb_p_flange"]
-    slend_web= slend_flex["slend_web"]
-    lamb_web= slend_flex["lamb_web"]
-    lamb_r_web= slend_flex["lamb_r_web"]
-    lamb_p_web= slend_flex["lamb_p_web"]
-
-
-    if slend_web == "Compact":
-        if slend_flange == "Compact":
-            # Calculate lateral-torsional buckling parameters
-            c_sect = 1
-            ho_sect = d_sect-tf_sect # Distance between flange centroids 
-            
-            # Radius of gyration for torsional buckling (Eq. F2-7)
-            rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
-
-            # Limiting unbraced lengths
-            L1 = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
-            L2 = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
-        elif slend_flange == "Noncompact":
-
-            Mr_F3_2 = stren_flex_i_flb_F3_2(prop_mat, prop_sect, 1, Cb)["Mn"]
-            
-            # Calculate plastic moment (Mp) using a separate function
-            Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect)["Mn"] #Calls function that calculates plastic moment
-            
-            # Calculate lateral-torsional buckling parameters
-            c_sect = 1
-            ho_sect = d_sect-tf_sect # Distance between flange centroids 
-            
-            # Radius of gyration for torsional buckling (Eq. F2-7)
-            rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
-
-            # Limiting unbraced lengths
-            Lp = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
-            Lr = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
-
-            # Elastic critical moment for LTB (Eq. F2-4)
-            Fcr_lr=Cb*math.pi**2*Es/((Lr/rts)**2)*sqrt(1+0.078*J_sect*c_sect/(Sx_sect*ho_sect)*(Lr/rts)**2) #F2-4
-
-            # Determine nominal flexural strength Mn
-            Mn1 = Mr_F3_2
-            Mn2 = min(Fcr_lr*Sx_sect,Mp) #F2-3 Elastic buckling
-
-            L1 = ((Mp-Mn1/Cb)*(Lr-Lp)/(Mp-0.7*Fy*Sx_sect))+Lp
-            L2 = ((Mp-Mn2/Cb)*(Lr-Lp)/(Mp-0.7*Fy*Sx_sect))+Lp
-
-        elif slend_flange == "Slender":
-            
-            Mr_F3_2 = stren_flex_i_flb_F3_2(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1 = Mr_F3_2
-            Mn2 = Mr_F3_2
-
-            rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
-            c_sect = 1
-            ho_sect = d_sect-tf_sect # Distance between flange centroids 
-
-
-            # Calcular los términos de la ecuación
-            term1 = 0.384914571642485 * (Cb**2 * Es**2 * J_sect * Sx_sect * c_sect) / (Mr_F3_2**2 * ho_sect)
-            term2 = Cb * Es * Sx_sect / (Mr_F3_2**2 * ho_sect)
-            raiz_interna = 0.148159227462718 * Cb**2 * Es**2 * J_sect**2 * c_sect**2 + Mr_F3_2**2 * ho_sect**2
-
-            # Verificar si la raíz interna es positiva
-            if raiz_interna < 0:
-                return "Error: No hay soluciones reales para Lb"
-
-            raiz_valor = math.sqrt(raiz_interna)
-
-            # Verificar si term1 - term2 * raiz_valor es negativo
-            if term1 - term2 * raiz_valor < 0:
-                Lb_1 = None  # No tiene solución real
-            else:
-                Lb_1 = math.pi * rts * math.sqrt(term1 - term2 * raiz_valor)
-
-            if term1 + term2 * raiz_valor < 0:
-                Lb_2 = None  # No tiene solución real
-            else:
-                Lb_2 = math.pi * rts * math.sqrt(term1 + term2 * raiz_valor)
-
-            # Filtrar solo soluciones reales y positivas
-            L2 = float([Lb for Lb in [Lb_1, Lb_2] if Lb is not None and Lb > 0][0])
-            L1 = L2   
-    if slend_web == "Noncompact":
-
-        if slend_flange == "Compact":
-            Mn1_1 = stren_flex_i_cfy_F4_1(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1_3 = stren_flex_i_ltb_F4_3(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1 = min(Mn1_1,Mn1_3)
-
-            # Compute lateral-torsional buckling parameters
-            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
-            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
-            FL = 0.7*Fy #F4-6a
-
-            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
-            Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
-
-            L1 = Lp
-            L2 = Lr
-            Fcr = Cb*pi**2*Es/(L2/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(L2/rt)**2))) #F4-5
-
-            # Compute moment of inertia of the compression flange about its own axis (Eq. F4-8)
-            Iyc_sect=1/12*tf_sect*bf_sect**3
-
-            # Compute yield moment
-            Myc=Fy*Sx_sect #F4-4
-            
-            # Compute plastic moment considering compactness
-            Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
-
-            # Compute Rpc factor for strength adjustment
-            if Iyc_sect/Iy_sect>0.23:
-                if h_sect/tw_sect<=lamb_p_web:
-                    Rpc=Mp1/Myc #F4-9a
-                elif h_sect/tw_sect>lamb_p_web:
-                    Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc) #F4-9b
-            elif Iyc_sect/Iy_sect<=0.23:
-                Rpc=1 #F4-10
-
-            Mn2=min(Cb*(Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*((L2-Lp)/(Lr-Lp))),Rpc*Myc) #F4-2
-        elif slend_flange == "Noncompact":
-            
-            Mn1_1 = stren_flex_i_cfy_F4_1(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1_3 = stren_flex_i_ltb_F4_3(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1 = min(Mn1_1,Mn1_3)
-
-            # Compute lateral-torsional buckling parameters
-            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
-            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
-            FL = 0.7*Fy #F4-6a
-
-            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
-            Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
-
-            L1 = Lp
-            L2 = Lr
-            Fcr = Cb*pi**2*Es/(L2/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(L2/rt)**2))) #F4-5
-
-
-            # Compute moment of inertia of the compression flange about its own axis (Eq. F4-8)
-            Iyc_sect=1/12*tf_sect*bf_sect**3
-
-            # Compute yield moment
-            Myc=Fy*Sx_sect #F4-4
-            
-            # Compute plastic moment considering compactness
-            Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
-
-            # Compute Rpc factor for strength adjustment
-            if Iyc_sect/Iy_sect>0.23:
-                if h_sect/tw_sect<=lamb_p_web:
-                    Rpc=Mp1/Myc #F4-9a
-                elif h_sect/tw_sect>lamb_p_web:
-                    Rpc=min(Mp1/Myc-((Mp1/Myc)-1)*((lamb_web-lamb_p_web)/(lamb_r_web-lamb_p_web)),Mp1/Myc) #F4-9b
-            elif Iyc_sect/Iy_sect<=0.23:
-                Rpc=1 #F4-10
-
-            
-            L1 = (Rpc*Myc-Mn1/Cb)/(Rpc*Myc-FL*Sx_sect)*(Lr-Lp)+Lp
-            
-                        
-            Mn2=min(Cb*(Rpc*Myc-(Rpc*Myc-FL*Sx_sect)*((L2-Lp)/(Lr-Lp))),Rpc*Myc) #F4-2
-
-            L2 = (Rpc*Myc-Mn2/Cb)/(Rpc*Myc-FL*Sx_sect)*(Lr-Lp)+Lp      
-        elif slend_flange == "Slender":     
-            Mn1_1 = stren_flex_i_cfy_F4_1(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1_3 = stren_flex_i_ltb_F4_3(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1 = min(Mn1_1,Mn1_3)
-            Mn2 = min(Mn1_1,Mn1_3)
-
-            # Compute lateral-torsional buckling parameters
-            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
-            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
-            FL = 0.7*Fy #F4-6a
-
-            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
-            Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
-            Fcr = Cb*pi**2*Es/(Lb/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(Lb/rt)**2))) #F4-5
-
-            # Compute moment of inertia of the compression flange about its own axis (Eq. F4-8)
-            Iyc_sect=1/12*tf_sect*bf_sect**3
-
-            # Calcular los términos de la ecuación
-            term1 = 0.384914571642485 * (Cb**2 * Es**2 * J_sect * Sx_sect ) / (Mn1**2 * ho_sect)
-            term2 = Cb * Es * Sx_sect / (Mn1**2 * ho_sect)
-            raiz_interna = 0.148159227462718 * Cb**2 * Es**2 * J_sect**2 * + Mn1**2 * ho_sect**2
-
-            # Verificar si la raíz interna es positiva
-            if raiz_interna < 0:
-                return "Error: No hay soluciones reales para Lb"
-
-            raiz_valor = math.sqrt(raiz_interna)
-
-            # Verificar si term1 - term2 * raiz_valor es negativo
-            if term1 - term2 * raiz_valor < 0:
-                Lb_1 = None  # No tiene solución real
-            else:
-                Lb_1 = math.pi * rt * math.sqrt(term1 - term2 * raiz_valor)
-
-            if term1 + term2 * raiz_valor < 0:
-                Lb_2 = None  # No tiene solución real
-            else:
-                Lb_2 = math.pi * rt * math.sqrt(term1 + term2 * raiz_valor)
-
-            # Filtrar solo soluciones reales y positivas
-            L2 = float([Lb for Lb in [Lb_1, Lb_2] if Lb is not None and Lb > 0][0])
-            L1 = L2   
-
-    if slend_web == "Slender":
-
-        if slend_flange == "Compact":
-            Mn1_1 = stren_flex_i_cfy_F5_1(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1_3 = stren_flex_i_flb_F5_3(prop_mat, prop_sect, 1, Cb)["Mn"]
-            Mn1 = min(Mn1_1,Mn1_3)
-
-            # Limiting laterally unbraced length for full plastic strength
-            aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
-            rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
-            Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
-            Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
-            # Limiting laterally unbraced length for inelastic buckling
-            Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
-            # Plastic moment capacity considering compactness
-            Mp1 = min(Zx_sect*Fy,1.6*Sx_sect*Fy)
-
-            L1 = Lp
-            L2 = Lr
-            Fcr = Cb*pi**2*Es/(L2/rt)**2*sqrt(1+0.078*(J_sect/(Sx_sect*h_sect*(L2/rt)**2))) #F4-5
-
-            Fcr1 = min(Cb*(Fy-(0.3*Fy)*((L2-Lp)/(Lr-Lp))),Fy) #F5-3
-            Mn = Rpg*Fcr1*Sx_sect
-            Mn1 = Mn
-
-            Fcr2 = min(Cb*pi**2*Es/((L2/rt)**2),Fy)
-            Mn2 = Rpg*Fcr2*Sx_sect
-    
-    
-    
-    
-    unb_len = {"Mn1":Mn1,
-                "L1":L1,
-                "Mn2":Mn2,
-                "L2":L2}
-    return unb_len
-
-
 def graf_flex_i(prop_mat,prop_sect,Cb):
-    # Material properties
-    Fy = prop_mat["Fy"]
-    Es = prop_mat["Es"]
-
-    # Section properties
+    
     sect_name = prop_sect["sect_name"]
-    d_sect = prop_sect["d_sect"]
-    tw_sect = prop_sect["tw_sect"]
-    bf_sect = prop_sect["bf_sect"]
-    tf_sect = prop_sect["tf_sect"]
-    h_sect = prop_sect["h_sect"]
-    Ag_sect = prop_sect["Ag_sect"]
-    Ix_sect = prop_sect["Ix_sect"]
-    Iy_sect = prop_sect["Iy_sect"]
-    Sx_sect = prop_sect["Sx_sect"]
-    Sy_sect = prop_sect["Sy_sect"]
-    Zx_sect = prop_sect["Zx_sect"]
-    Zy_sect = prop_sect["Zy_sect"]
-    rx_sect = prop_sect["rx_sect"]
-    ry_sect = prop_sect["ry_sect"]
-    J_sect = prop_sect["J_sect"]
-    Cw_sect = prop_sect["Cw_sect"]
-
-    # Compute slenderness parameters
-    slend_flex = slend_i_flex_ns(prop_mat, prop_sect) #Calls function slenderness calculation
-    slend_flange = slend_flex["slend_flange"]
-    lamb_flange= slend_flex["lamb_flange"]
-    lamb_r_flange= slend_flex["lamb_r_flange"]
-    lamb_p_flange= slend_flex["lamb_p_flange"]
-    slend_web= slend_flex["slend_web"]
-    lamb_web= slend_flex["lamb_web"]
-    lamb_r_web= slend_flex["lamb_r_web"]
-    lamb_p_web= slend_flex["lamb_p_web"]
-
-   
-    # Determine flexural strength based on slenderness classification
-    if slend_web == "Compact":
-        # Calculate lateral-torsional buckling parameters
-        c_sect = 1
-        ho_sect = d_sect-tf_sect # Distance between flange centroids 
-
-        # Radius of gyration for torsional buckling (Eq. F2-7)
-        rts = sqrt(sqrt(Iy_sect*Cw_sect)/Sx_sect) #F2-7 
-        
-        # Limiting unbraced lengths
-        Lp = 1.76*ry_sect*sqrt(Es/Fy) #F2-5
-        Lr = 1.95*rts*Es/(0.7*Fy)*sqrt(J_sect*c_sect/(Sx_sect*ho_sect)+sqrt((J_sect*c_sect/(Sx_sect*ho_sect))**2+6.76*(0.7*Fy/Es)**2)) #F2-6
-
-        if slend_flange == "Compact":
-
-            Mp = stren_flex_i_y_F2_1(prop_mat, prop_sect)["Mn"]*.9
-            Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)["Mres"]
-           
-        else:
-            Mplastif = stren_flex_i_y_F2_1(prop_mat, prop_sect)["Mn"]
-            if slend_flange == "Noncompact":
-                Mp1 = (Mplastif-(Mplastif-0.7*Fy*Sx_sect)*((lamb_flange-lamb_p_flange)/(lamb_r_flange-lamb_p_flange)))*.9 #F3-1
-            elif slend_flange == "Slender":
-                kc = min(max(4/(sqrt(h_sect/tw_sect)),0.35),0.76)
-                Mp1 = 0.9*Es*kc*Sx_sect/(lamb_flange**2) #F3-2
-            Mp=Mp1
-            Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)["Mres"]
-
-            Lb_obj = (Mplastif-(Mp1/(0.9*Cb)))/(Mplastif-0.7*Fy*Sx_sect)*(Lr-Lp)+Lp
-            Lp = Lb_obj
-
-    elif slend_web == "Noncompact":
-        aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
-        rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
-        FL = 0.7*Fy #F4-6a
-
-        # Limiting unbraced lengths
-        Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
-        Lr = 1.95*rt*Es/FL*sqrt(J_sect/(Sx_sect*h_sect)+sqrt((J_sect/(Sx_sect*h_sect))**2+6.76*(FL/Es)**2)) #F4-8
-
-        # Plastic moment capacity considering compactness
-        Mp = min(Zx_sect*Fy,1.6*Sx_sect*Fy)*.9
-        Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)["Mres"]
-
-    elif slend_web == "Slender":
-        # Limiting laterally unbraced length for full plastic strength
-        aw = h_sect*tw_sect/(bf_sect*tf_sect) #F4-12
-        rt = bf_sect/sqrt(12*(1+1/6*aw)) #F4-11
-        Lp = 1.1*rt*sqrt(Es/Fy) #F4-7
-        Rpg = min(1-aw/(1200+300*aw)*((h_sect/tw_sect)-5.7*sqrt(Es/Fy)),1) #F5-6
-
-        # Limiting laterally unbraced length for inelastic buckling
-        Lr = pi*rt*sqrt(Es/(0.7*Fy)) #F5-5
-        # Plastic moment capacity considering compactness
-        Mp = min(Zx_sect*Fy,1.6*Sx_sect*Fy)*.9
-        Mr = stren_flex_i(prop_mat,prop_sect,Lr,Cb)["Mres"]
-
-
+    
+    unb_len = stren_flex_i_unb_leng (prop_mat,prop_sect,Cb)
+    Mn1 = unb_len["Mn1"]
+    Mn2 = unb_len["Mn2"]    
+    L1 = unb_len["L1"]
+    L2 = unb_len["L2"] 
+    
     #Calcula los valores de soporte lateral de referencia
-    Lp_graf = Lp/1000 #Lp en metros
-    Lr_graf = Lr/1000 #Lr en metros
-    Lb_max = int(3*Lr) #Máximo valor de Lb graficado
+    L1_graf = L1/1000 #Lp en metros
+    L2_graf = L2/1000 #Lr en metros
+    Lb_max = int(3*L2) #Máximo valor de Lb graficado
 
     #Calcula los valores de momento de referencia
-    Mp_graf = Mp/1000000
-    Mr_graf = Mr/1000000
+    M1_graf = Mn1/1000000*0.9
+    M2_graf = Mn2/1000000*0.9
 
     #Genera vectores con todos los valores de Lb y Mres
     vect_lb=[] #Vector que almacena los valores de Lb
@@ -2423,23 +2365,21 @@ def graf_flex_i(prop_mat,prop_sect,Cb):
     plt.title("["+sect_name+"]"+ " Lb vs Mom resist")
     
     #Crea lineas de corte para valores de Lp y Lr
-    plt.axvline(x = Lp_graf, color = 'g', label = "Lp") #Linea Lp
-    plt.axvline(x = Lr_graf, color = 'g', label = "Lp") #Linea Lr
-    plt.text(Lp_graf, min(vect_Mgraf), f"Lp = {Lp_graf:.2f} m", 
+    plt.axvline(x = L1_graf, color = 'g', label = "L1") #Linea Lp
+    plt.axvline(x = L2_graf, color = 'g', label = "L2") #Linea Lr
+    plt.text(L1_graf, min(vect_Mgraf), f"L1 = {L1_graf:.2f} m", 
             color='g', fontsize=12, ha='right', rotation=90)
-    plt.text(Lr_graf, min(vect_Mgraf), f"Lr = {Lr_graf:.2f} m", 
+    plt.text(L2_graf, min(vect_Mgraf), f"L2 = {L2_graf:.2f} m", 
             color='r', fontsize=12, ha='right', rotation=90)
 
     #Crea puntos con momentos Mp y Mr 
-    plt.text(Lp_graf, Mp_graf, f"Mp = {Mp_graf:.2f} kN*m", 
+    plt.text(L1_graf, M1_graf, f"M1 = {M1_graf:.2f} kN*m", 
             color='r', fontsize=12, ha='left',va='bottom', rotation=0)
-    plt.text(Lr_graf, Mr_graf, f"Mr = {Mr_graf:.2f} kN*m", 
+    plt.text(L2_graf, M2_graf, f"M2 = {M2_graf:.2f} kN*m", 
             color='r', fontsize=12, ha='left',va='bottom', rotation=0)
 
 
     plt.xticks(np.arange(0, round(vect_lb[-1]), 1))
-    plt.yticks(np.arange(0, Mp_graf*1.3,round(Mp_graf*1.1/5)))
+    plt.yticks(np.arange(0, M1_graf*1.3,round(M1_graf*1.1/5)))
     plt.xlim(0, max(vect_lb))
     plt.show()
-
-    print(Mp_graf)
